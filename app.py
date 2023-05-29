@@ -14,6 +14,7 @@ import json
 import torchvision
 import torch 
 from tools.painter import mask_painter
+from tools.dumb import last_video_fn
 import psutil
 import time
 try: 
@@ -79,6 +80,10 @@ def get_frames_from_video(video_input, video_state):
     Return 
         [[0:nearest_frame], [nearest_frame:], nearest_frame]
     """
+
+    # note this down
+    last_video_fn(video_input)
+
     video_path = video_input
     frames = []
     user_name = time.time()

@@ -13,11 +13,17 @@ from tracker.util.mask_mapper import MaskMapper
 from torchvision import transforms
 from tracker.util.range_transform import im_normalization
 
+from tools.dumb import last_video_fn
+from tools.ps import subdir_stack_to_psd
 from tools.painter import mask_painter
 from tools.base_segmenter import BaseSegmenter
 from torchvision.transforms import Resize
 import progressbar
+import pathlib
+import re
 
+BASE_EXTRACT_DIR = 'I:/video_morph_frames/rigged/'
+industrystandardcoding = {}
 
 class BaseTracker:
     def __init__(self, xmem_checkpoint, device, sam_model=None, model_type=None) -> None:
@@ -89,7 +95,7 @@ class BaseTracker:
         out_mask = (out_mask.detach().cpu().numpy()).astype(np.uint8)
 
         final_mask = np.zeros_like(out_mask)
-        
+
         # map back
         for k, v in self.mapper.remappings.items():
             final_mask[out_mask == v] = k
@@ -103,6 +109,40 @@ class BaseTracker:
 
         # print(f'max memory allocated: {torch.cuda.max_memory_allocated()/(2**20)} MB')
 
+        global industrystandardcoding
+        if "i" not in industrystandardcoding:
+            industrystandardcoding["i"] = 0
+
+        if os.environ.get("EVERY_N_FRAMES") and ( (int(industrystandardcoding["i"]) % int(os.environ.get("EVERY_N_FRAMES"))) != 0 ):
+            print("skipping frame %d because EVERY_N_FRAMES set to %d" % (int(industrystandardcoding["i"]), int(os.environ.get("EVERY_N_FRAMES"))))
+        else:
+            v = last_video_fn()
+            _, vfn =os.path.split(v)
+            clean_vfn = re.sub("[^\w\d]", "_", vfn)
+
+            # create subdir for this frame 
+            sd = BASE_EXTRACT_DIR + "/" + clean_vfn + "/" + "%06d" % (industrystandardcoding["i"])
+            pathlib.Path(sd).mkdir(parents=True, exist_ok=True)
+
+            # dump mask into subdir
+            mask_path = sd + "/mask.png"
+    #        mask_path = BASE_EXTRACT_DIR + "%06d_mask.png" % (industrystandardcoding["i"])
+            mask_data = Image.fromarray(final_mask * 255)
+            mask_data.save(mask_path)
+
+            # dump frame into subdir
+    #        frame_path = BASE_EXTRACT_DIR + "%06d_frame.png" % (industrystandardcoding["i"])
+            frame_path = sd + "/frame.png"
+            frame_data = Image.fromarray(frame)
+            frame_data.save(frame_path)
+
+            psd_path = sd + "/%06d.psd" % (industrystandardcoding["i"])
+
+            # assemble into psd
+            subdir_stack_to_psd(sd, psd_path)
+
+        
+        industrystandardcoding["i"] += 1
         return final_mask, final_mask, painted_image
 
     @torch.no_grad()
